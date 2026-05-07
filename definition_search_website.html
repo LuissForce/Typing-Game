@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Word Definition Search</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+      color: #202124;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 700px;
+      text-align: center;
+      margin-top: 120px;
+    }
+
+    h1 {
+      font-size: 54px;
+      font-weight: 500;
+      margin-bottom: 30px;
+      letter-spacing: -2px;
+    }
+
+    .blue { color: #4285f4; }
+    .red { color: #ea4335; }
+    .yellow { color: #fbbc05; }
+    .green { color: #34a853; }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      border: 1px solid #dfe1e5;
+      border-radius: 24px;
+      padding: 0 16px;
+      height: 48px;
+      box-shadow: none;
+    }
+
+    .search-box:focus-within {
+      box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+      border-color: transparent;
+    }
+
+    input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 16px;
+      padding: 10px;
+    }
+
+    button {
+      margin-top: 26px;
+      background: #f8f9fa;
+      border: 1px solid #f8f9fa;
+      border-radius: 4px;
+      color: #3c4043;
+      font-size: 14px;
+      padding: 10px 18px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border: 1px solid #dadce0;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+    }
+
+    .result {
+      margin-top: 40px;
+      text-align: left;
+      border-top: 1px solid #e0e0e0;
+      padding-top: 24px;
+      display: none;
+    }
+
+    .word {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .definition {
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .not-found {
+      color: #5f6368;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>
+      <span class="blue">D</span><span class="red">e</span><span class="yellow">f</span><span class="blue">i</span><span class="green">n</span><span class="red">e</span>
+    </h1>
+
+    <form id="searchForm">
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="Search for a word definition" autocomplete="off" />
+      </div>
+      <button type="submit">Search Definition</button>
+    </form>
+
+    <section id="result" class="result">
+      <div id="word" class="word"></div>
+      <div id="definition" class="definition"></div>
+    </section>
+  </main>
+
+  <script>
+    const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQgRqKTrcGussLDKB14m5YQ5ZP1wKv5cLPXtEUVqhs_ZxP8yP8JJoj74Hcw5RrqpRSDKcLE11uxptUc/pub?gid=0&single=true&output=csv";
+
+    let dictionary = {
+      immediately: "Immediately means doing something right away, at once, or without any delay. It means &quot;this very second&quot; with no waiting time in between."
+    };
+
+    const form = document.getElementById("searchForm");
+    const input = document.getElementById("searchInput");
+    const result = document.getElementById("result");
+    const wordElement = document.getElementById("word");
+    const definitionElement = document.getElementById("definition");
+
+    async function loadDictionaryFromSheet() {
+      try {
+        const response = await fetch(GOOGLE_SHEET_CSV_URL + "&cacheBust=" + new Date().getTime());
+        if (!response.ok) {
+          throw new Error("Google Sheet did not respond correctly.");
+        }
+        const csvText = await response.text();
+        const rows = parseCSV(csvText);
+
+        rows.slice(1).forEach(function(row) {
+          const word = cleanText(row[0]).toLowerCase();
+          const definition = cleanText(row[1]);
+          const examples = cleanText(row[2]);
+          const synonyms = cleanText(row[3]);
+
+          if (word && definition) {
+            let fullDefinition = formatText(definition);
+
+            if (examples) {
+              fullDefinition += "<br><br><strong>Examples:</strong><br>" + formatText(examples);
+            }
+
+            if (synonyms) {
+              fullDefinition += "<br><br><strong>Synonyms:</strong><br>" + formatText(synonyms);
+            }
+
+            dictionary[word] = fullDefinition;
+            console.log("Loaded word:", word);
+          }
+        });
+      } catch (error) {
+        console.error("Could not load the Google Sheet:", error);
+        showMessage("Database error", "The word database could not be loaded. Please check the Google Sheet link.");
+      }
+    }
+
+    function cleanText(value) {
+      return value ? value.trim() : "";
+    }
+
+    function formatText(value) {
+      return escapeHTML(value).split(String.fromCharCode(10)).join("<br>");
+    }
+
+    function escapeHTML(value) {
+      return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function parseCSV(text) {
+      const rows = [];
+      let currentRow = [];
+      let currentCell = "";
+      let insideQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (char === '"' && insideQuotes && nextChar === '"') {
+          currentCell += '"';
+          i++;
+        } else if (char === '"') {
+          insideQuotes = !insideQuotes;
+        } else if (char === "," && !insideQuotes) {
+          currentRow.push(currentCell);
+          currentCell = "";
+        } else if ((char === String.fromCharCode(10) || char === String.fromCharCode(13)) && !insideQuotes) {
+          if (currentCell || currentRow.length > 0) {
+            currentRow.push(currentCell);
+            rows.push(currentRow);
+            currentRow = [];
+            currentCell = "";
+          }
+        } else {
+          currentCell += char;
+        }
+      }
+
+      if (currentCell || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+      }
+
+      return rows;
+    }
+
+    function showMessage(title, message) {
+      result.style.display = "block";
+      wordElement.textContent = title;
+      definitionElement.innerHTML = message;
+    }
+
+    form.addEventListener("submit", function(event) {
+      event.preventDefault();
+
+      const searchedWord = input.value.trim().toLowerCase();
+
+      if (!searchedWord) {
+        showMessage("Please type a word.", "");
+        return;
+      }
+
+      if (dictionary[searchedWord]) {
+        showMessage(searchedWord, dictionary[searchedWord]);
+      } else {
+        showMessage("No definition found", "<span class='not-found'>This word is not in the database yet.</span>");
+      }
+    });
+
+    loadDictionaryFromSheet().then(function() {
+      console.log("Dictionary loaded. Total words:", Object.keys(dictionary).length);
+    });
+  </script>
+</body>
+</html>
